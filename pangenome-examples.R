@@ -1,22 +1,23 @@
 ## This is an example script for calculating
 ## properties of pangenomes and core genomes
 ## using the Infinitely Many Genes model of
-## Pfaffelhuber et al. 2010
+## Pfaffelhuber and Baumdicker 2010
 ## with modifications by Collins and Higgs (2011)
 ##
 ## written by R. Eric Collins, 2011
 ## released under the GNU Public License
 ## The most recent version can be found at
-## http://github.com/rec3141/pancore
+## http://github.com/rec3141/pangenome
 ##
 ## Usage:
 ## If you have R properly installed you
 ## should be able to run the examples from the
-## command line via: R CMD BATCH example.R
+## command line via: 
+## R CMD BATCH pangenome-examples.R
 ## then look at the plots produced in Rout.pdf.
 ##
 ## From within R, run the examples via:
-## source("example.R")
+## source("pangenome-examples.R")
 ##
 ## To work with your own dataset, make sure
 ## to realize that the fitting routines are
