@@ -24,6 +24,10 @@
 ## sensitive to initial parameters, so you 
 ## will likely need to change them
 ## to find the best fit
+##
+## you will also need to run tre2table.pl
+## on your phylogenetic tree to get the treetable
+## for fitting fixed trees
 
 rm(list=ls())
 
@@ -31,7 +35,7 @@ rm(list=ls())
 source("f-pangenome.R")
 
 # read in matrix of all Bacilli gene clusters
-# less strict clustering
+# less strict clustering (default)
 infile <- "Bacilli-clusters.1e-10.6.csv"
 # more strict clustering
 # infile <- "Bacilli-clusters.1e-30.7.csv"
@@ -65,6 +69,7 @@ bp.x <- barplot(Gk, ylab="Frequency of Gene Families",xlab="Number of Genomes",n
 mytree<-"coalescent.spec" #use the coalescent tree w/G(k)
 myfitting<-"chi2" #fit it using the Chi^2
 constr<- 1 # G0 constrained to the mean genome size during fitting
+# !! if constr changes, need to change input parameters as well
 mymethod <- "Nelder" # alternative fitting routine: "BFGS"
 
 params.cde <- c(1,100) #starting parameters theta1, ness
@@ -76,11 +81,11 @@ opt.cde <- optim(
   control=list(trace=1,parscale=params.cde+1e-6,maxit=10000)
 )
 
-# best fit for non-strict dataset:
+# best fit for strict dataset:
 # chi2 = 21589.43
 # params = 1.037437 842.326605
 
-# best fit for strict dataset:
+# best fit for non-strict dataset:
 # chi2 = 9088.489462
 # params = 0.9686929 854.3339099
 
@@ -97,6 +102,7 @@ lines(bp.x,spec.cde,col='red',lwd=2,lty=2)
 mytree<-"coalescent.spec" #use the coalescent tree w/G(k)
 myfitting<-"chi2" #fit it using the Chi^2
 constr<- 1 # G0 constrained to the mean genome size during fitting
+# !! if constr changes, need to change input parameters as well
 mymethod <- "Nelder" # alternative fitting routine: "BFGS"
 
 params.c2de <- c(1,1000,1000,100) #rho1, theta1, ness, rho2, (theta2 constrained)
@@ -108,11 +114,11 @@ opt.c2de <- optim(
   control=list(trace=1,parscale=params.c2de+1e-6,maxit=10000)
 )
 
-# best fit for non-strict dataset:
+# best fit for strict dataset:
 # chi2 = 1007.792
 # params = 1.047101 2064.168648 1103.227536  200.462348
 
-# best fit for strict dataset:
+# best fit for non-strict dataset:
 # chi2 = 593.373075
 # params = 0.952658  1488.599551  1037.741085    75.78778
 
@@ -132,7 +138,8 @@ colnames(treetable) <- c("desc_a","desc_b","dist")
 
 mytree<-"fixed.spec" #use a fixed tree w/G(k)
 myfitting<-"chi2" #fit it using chi2 or sumsq
-constr<- 1 # G0 constrained to the mean genome size during fitting
+constr<- 1 # G0 constrained to the mean genome size during fitting;
+# !! if constr changes, need to change input parameters as well
 mymethod <- "BFGS" # alternative fitting routines: "BFGS","Nelder"
 
 params.f2de <- opt.c2de$par #rho1, theta1, ness, rho2, (theta2 constrained)
@@ -144,14 +151,15 @@ opt.f2de <- optim(
   control=list(trace=1,parscale=params.f2de+1e-6,maxit=10000)
 )
 
-# best fit for non-strict dataset:
-# chi2 = 1104.552
-# params = 1.194561 2076.469124 1062.999820  236.381120
-
 # best fit for strict dataset:
-# chi2 = 495.020973
-# params = 1.271341  1735.432410  1013.196002    70.250007
+# chi2 = 1155.889117
+# params = 1.409766e+00 2.472642e+03 1.063544e+03 3.194629e+02
 
+# best fit for non-strict dataset:
+# chi2 = 500.630331
+# params = 1.444672  1924.349238  1005.634224    73.158244
+
+# params.f2de <- c(params.f2de,params.f2de[4]*(genomesize-params.f2de[2]/params.f2de[1]-params.f2de[3]))
 
 # get optimized parameters, calculate constrained parameter
 params.f2de <- c(opt.f2de$par,opt.f2de$par[4]*(genomesize-opt.f2de$par[2]/opt.f2de$par[1]-opt.f2de$par[3]))
@@ -160,8 +168,9 @@ spec.f2de <- f.fixed.spec(params.f2de,treetable)
 lines(bp.x,spec.f2de,col='blue',lwd=2)
 
 legend("top",c("1D+E on coalescent","2D+E on coalescent","2D+E on fixed tree"),lty=c(2,1,1),col=c('red','red','blue'),lwd=2)
-dev.copy2pdf(file="genespectrum.pdf",width=6,height=6)
-
+if(.Internal(dev.displaylist())) {
+  dev.copy2pdf(file="genespectrum.pdf",width=6,height=6)
+}
 ##---------------------------------
 ## Pangenome and core genome curves
 ##---------------------------------
@@ -196,7 +205,7 @@ constr<- 1 # G0 constrained to the mean genome size during fitting
 mymethod <- "Nelder" # alternative fitting routine: "Nelder"
 
 params.c2de <- c(1,1000,1000,10) #rho1, theta1, ness, rho2, (theta2 constrained)
-params.c2de <- c(1,1000,1000,5) #rho1, theta1, ness, rho2, (theta2 constrained)
+# params.c2de <- c(1,1000,1000,5) #rho1, theta1, ness, rho2, (theta2 constrained)
 
 opt.c2de <- optim(
   params.c2de,
@@ -205,11 +214,11 @@ opt.c2de <- optim(
   control=list(trace=1,parscale=params.c2de+1e-6,maxit=10000)
 )
 
-# best fit for non-strict dataset:
+# best fit for strict dataset:
 # chi2 = 6.216309
 # params = 1.011401 2216.125953  896.717547  204.852939
 
-# best fit for strict dataset:
+# best fit for non-strict dataset:
 # chi2 = 7.569648
 # params = 0.8522393 1432.3099454  892.6032901   56.2204857
 
@@ -227,7 +236,7 @@ lines(1:ng,pancore.c2de$core,col='red',lwd=2)
 mytree<-"star" #use the coalescent tree w/G(k)
 myfitting<-"chi2" #fit it using the Chi^2
 constr<- 1 # G0 constrained to the mean genome size during fitting
-mymethod <- "BFGS" # alternative fitting routine: "Nelder"
+mymethod <- "Nelder" # alternative fitting routine: "Nelder"
 
 params.s2de <- c(0.01,10,1000,1) #rho1, theta1, ness, rho2, (theta2 constrained)
 
@@ -238,13 +247,13 @@ opt.s2de <- optim(
   control=list(trace=1,parscale=params.s2de+1e-6,maxit=10000)
 )
 
-# best fit for non-strict dataset: 
+# best fit for strict dataset: 
 # chi2 = 3640.319110
 # params = 0.002859687 2.996654750 5.029033100 0.365977668
 
-# best fit for strict dataset:
-# chi2 = 4306.126837
-# params = 7.746796e-04 7.737486e-01 3.812043e-01 2.636258e-01
+# best fit for non-strict dataset:
+# chi2 = 4306.110970
+# params = 6.816390e-04 6.796039e-01 3.384930e-02 2.633550e-01
 
 params.s2de <- c(opt.s2de$par,opt.s2de$par[4]*(genomesize-opt.s2de$par[2]/opt.s2de$par[1]-opt.s2de$par[3]))
 print(params.s2de)
@@ -273,13 +282,13 @@ opt.f2de <- optim(
   control=list(trace=1,parscale=params.f2de+1e-6,maxit=10000)
 )
 
-# best fit for non-strict dataset:
-# chi2 = 8.818609
-# params = 1.564745 3336.309 914.9655 947.0657
-
 # best fit for strict dataset
-# chi2 = 2.795111
-# params = 1.078041  1493.368589   867.686765    37.312469
+# chi2 = 7.571625
+# params = 1.809337 3837.545746  909.270962  969.584393
+
+# best fit for non-strict dataset:
+# chi2 = 2.378604
+# params = 1.25003  1738.07978   860.48100    48.10588
 
 params.f2de <- c(opt.f2de$par,opt.f2de$par[4]*(genomesize-opt.f2de$par[2]/opt.f2de$par[1]-opt.f2de$par[3]))
 print(params.f2de)
@@ -289,4 +298,7 @@ lines(1:ng,pancore.f2de$pan,col='orange',lwd=2,lty=1)
 lines(1:ng,pancore.f2de$core,col='orange',lwd=2,lty=1)
 
 legend("right",c("2D+E on coalescent","2D+E on star tree","2D+E on a fixed tree"),lty=c(1,3,1),col=c('red','blue','orange'),lwd=2)
-dev.copy2pdf(file="pancore.pdf",width=6,height=6)
+
+if(.Internal(dev.displaylist())) {
+  dev.copy2pdf(file="pancore.pdf",width=6,height=6)
+}
