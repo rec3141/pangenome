@@ -1,219 +1,231 @@
+##---------------------------------------------------
+f.getspectrum <- function(mat) {
 #----------------------------------------------------
 # Function to compute gene frequency spectrum
 # given a matrix of gene clusters
 #----------------------------------------------------
-f.getspectrum <- function(mat) {
-ng <- dim(mat)[2]
-clusters <- apply(mat,1,function(x) sum(x>0))
-Gk <- hist(clusters,breaks=0:(ng+1),right=F,plot=F)$counts[-1] #observed G(k)
-return(Gk)
+  ng <- dim(mat)[2]
+  clusters <- apply(mat,1,function(x) sum(x>0))
+  Gk <- hist(clusters,breaks=0:(ng+1),right=F,plot=F)$counts[-1] #observed G(k)
+  return(Gk)
 }
 
+##---------------------------------------------------
+f.meanpancore <- function(Gk) {
 #----------------------------------------------------
 # Function to compute mean pan and core genome curves
 # given the gene frequency spectrum
 #----------------------------------------------------
-f.meanpancore <- function(Gk) {
-ng <- length(Gk)
-gk.pan <- (1:ng)*0 #mean pangenome curve from G(k)
-gk.core <- (1:ng)*0 #mean core curve from G(k)
+  ng <- length(Gk)
+  gk.pan <- (1:ng)*0 #mean pangenome curve from G(k)
+  gk.core <- (1:ng)*0 #mean core curve from G(k)
 
-#a gene is present in k genomes out of ng
-#the probability that the gene is absent in n genomes out of ng is...
-Pabs <- ((1:ng) %o% (1:ng))*0
-#the probability that the gene is present in all n genomes out of ng is...
-Pall <- ((1:ng) %o% (1:ng))*0
+  #a gene is present in k genomes out of ng
+  #the probability that the gene is absent in n genomes out of ng is...
+  Pabs <- ((1:ng) %o% (1:ng))*0
+  #the probability that the gene is present in all n genomes out of ng is...
+  Pall <- ((1:ng) %o% (1:ng))*0
 
-#calculate Pabs(n,k)
-for (k in 1:ng) {
+  #calculate Pabs(n,k)
+  for (k in 1:ng) {
+    for (n in 1:ng) {
+      if (n<=(ng-k)) {
+	Pabs[n,k] <- prod((ng+1-k-1:n)/(ng+1-1:n))
+      }
+    }
+  }
+
+  #calculate Pall(n,k)
+  for (n in 1:ng) { 
+    for (k in n:ng) {
+      Pprod <- 1:n
+      for (m in 1:n) {
+	Pprod[m] <- (k-m+1)/(ng-m+1)
+      }
+      Pall[n,k] <- prod(Pprod)
+    }
+  }
+
+  #calculate gk.pan and gk.core
   for (n in 1:ng) {
-    if (n<=(ng-k)) {
-      Pabs[n,k] <- prod((ng+1-k-1:n)/(ng+1-1:n))
-    }
+      gk.pan[n] <- sum(Gk * (1-Pabs[n,]))
+      gk.core[n] <- sum(Gk[n:ng] * Pall[n,n:ng])
   }
+
+  return(list("pan"=gk.pan,"core"=gk.core))
 }
 
-#calculate Pall(n,k)
-for (n in 1:ng) { 
-  for (k in n:ng) {
-    Pprod <- 1:n
-    for (m in 1:n) {
-      Pprod[m] <- (k-m+1)/(ng-m+1)
-    }
-    Pall[n,k] <- prod(Pprod)
-  }
-}
-
-#calculate gk.pan and gk.core
-for (n in 1:ng) {
-    gk.pan[n] <- sum(Gk * (1-Pabs[n,]))
-    gk.core[n] <- sum(Gk[n:ng] * Pall[n,n:ng])
-}
-
-return(list("pan"=gk.pan,"core"=gk.core))
-}
-
+##---------------------------------------------------
+f.pangenome <- function(mat,reps) {
 #----------------------------------------------------
 # function to compute pangenome curve permutations
 # given 1) a matrix of gene clusters
 #       2) the number of permutations 
 #----------------------------------------------------
-f.pangenome <- function(mat,reps) {
-ng <- dim(mat)[2] #number of genomes
-mat.ret <- NULL #matrix to return
-mat.pang <- (1:ng)*0 # initialize permutation pangenome
-mat.tmp <- mat[rowSums(mat)>0,]>0 #use only clusters that have data, presence/absence
-for (i in 1:reps) {
-  cat(i," ") #progress
-  samples <- sample(ng,ng,replace=F)
-  seen <- mat.tmp[,samples[1]]
-  mat.pang[1] <- sum(seen)
-  for (j in 2:ng) {
-    mat.pang[j] <- sum(mat.tmp[,samples[j]] - seen >0)
-    seen <- mat.tmp[,samples[j]] | seen
+
+  ng <- dim(mat)[2] #number of genomes
+  mat.ret <- NULL #matrix to return
+  mat.pang <- (1:ng)*0 # initialize permutation pangenome
+  mat.tmp <- mat[rowSums(mat)>0,]>0 #use only clusters that have data, presence/absence
+  for (i in 1:reps) {
+    cat(i," ") #progress
+    samples <- sample(ng,ng,replace=F)
+    seen <- mat.tmp[,samples[1]]
+    mat.pang[1] <- sum(seen)
+    for (j in 2:ng) {
+      mat.pang[j] <- sum(mat.tmp[,samples[j]] - seen >0)
+      seen <- mat.tmp[,samples[j]] | seen
+    }
+    mat.ret <- cbind(mat.ret,cumsum(mat.pang))
   }
-  mat.ret <- cbind(mat.ret,cumsum(mat.pang))
-}
-cat("\n")
-return(mat.ret)
+  cat("\n")
+  return(mat.ret)
 }
 
+##---------------------------------------------------
+f.core <- function(mat,reps) {
 #----------------------------------------------------
 # function to compute core genome curve permutations
 # given 1) a matrix of gene clusters
 #       2) the number of permutations 
 #----------------------------------------------------
-f.core <- function(mat,reps) {
-ng <- dim(mat)[2] #number of genomes
-mat.ret <- NULL #matrix to return
-mat.core <- (1:ng)*0 #initialize
-mat.save <- (1:ng)*0 #initialize
-mat.tmp <- 1*(mat[rowSums(mat)>0,]>0) #use only clusters that have data, presence/absence
-for (i in 1:reps) {
-  cat(i, " ")
-  samples <- sample(ng,ng,replace=F)
-  seen <- mat.tmp[,samples]
-  mat.core <- which(seen[,1]==1)
-  mat.save[1] <- length(mat.core)
-  for (j in 2:ng) {
-      mat.core <- intersect(which(seen[,j]==1),mat.core)
-      mat.save[j] <- length(mat.core)
+
+  ng <- dim(mat)[2] #number of genomes
+  mat.ret <- NULL #matrix to return
+  mat.core <- (1:ng)*0 #initialize
+  mat.save <- (1:ng)*0 #initialize
+  mat.tmp <- 1*(mat[rowSums(mat)>0,]>0) #use only clusters that have data, presence/absence
+  for (i in 1:reps) {
+    cat(i, " ")
+    samples <- sample(ng,ng,replace=F)
+    seen <- mat.tmp[,samples]
+    mat.core <- which(seen[,1]==1)
+    mat.save[1] <- length(mat.core)
+    for (j in 2:ng) {
+	mat.core <- intersect(which(seen[,j]==1),mat.core)
+	mat.save[j] <- length(mat.core)
+    }
+    mat.ret <- cbind(mat.ret,mat.save)
   }
-  mat.ret <- cbind(mat.ret,mat.save)
-}
-cat("\n")
-return(mat.ret)
+  cat("\n")
+  return(mat.ret)
 }
 
+##---------------------------------------------------
+f.coalescent <- function(x,ng) {
 #----------------------------------------------------
 # function to calculate stationary distribution of 
 # the IMG model on a coalescent
 # given A1) deletion rate class 1 (rho1)
 #       A2) insertion rate class 1 (theta1)
-#       A3) number of essential genes
+#       A3) number of essential genes (gess)
 #       A4) deletion rate class 2 (rho2)
 #       A5) insertion rate class 2 (theta2)
 #	B) number of genomes
-# 1D (rho1,theta1), 1D+E (rho1,theta1,ness), 2D (rho1,theta1,0,rho2,theta2), 2D+E (rho1,theta1,ness,rho2,theta2)
+# 1D (rho1,theta1), 1D+E (rho1,theta1,gess), 2D (rho1,theta1,0,rho2,theta2), 2D+E (rho1,theta1,gess,rho2,theta2)
 #----------------------------------------------------
-f.coalescent <- function(x,ng) {
 
-rho1 <- x[1] 
-theta1 <- x[2]
+  rho1 <- x[1] 
+  theta1 <- x[2]
 
-if (is.na(x[3])) {ness<-0} else {ness <- x[3]}
-if (is.na(x[4])) {theta2<-0;rho2<-1} else {rho2 <- x[4];theta2 <- x[5]}
+  if (is.na(x[3])) {gess<-0} else {gess <- x[3]}
+  if (is.na(x[4])) {theta2<-0;rho2<-1} else {rho2 <- x[4];theta2 <- x[5]}
 
-core <- (1:ng)*0
-pangenome <- (1:ng)*0
+  core <- (1:ng)*0
+  pangenome <- (1:ng)*0
 
-for (k in 1:ng) {
-#size of pan-genome after sampling K genomes from N
-  pangenome[k] <- theta1 * sum(1/(rho1-1+1:k)) + theta2*sum(1/(rho2-1+1:k)) + ness
+  for (k in 1:ng) {
+  #size of pan-genome after sampling K genomes from N
+    pangenome[k] <- theta1 * sum(1/(rho1-1+1:k)) + theta2*sum(1/(rho2-1+1:k)) + gess
 
-  specprod1 <- (k-1:k+1)/(k-1:k+rho1)
-  specprod2 <- (k-1:k+1)/(k-1:k+rho2)
+    specprod1 <- (k-1:k+1)/(k-1:k+rho1)
+    specprod2 <- (k-1:k+1)/(k-1:k+rho2)
 
-  core[k] <- (theta1/k)*prod(specprod1[1:k]) + (theta2/k)*prod(specprod2[1:k]) + ness
+    core[k] <- (theta1/k)*prod(specprod1[1:k]) + (theta2/k)*prod(specprod2[1:k]) + gess
+  }
+
+  return(list("pan"=pangenome,"core"=core))
 }
 
-return(list("pan"=pangenome,"core"=core))
-}
 
-
+##---------------------------------------------------
+f.coalescent.spec <- function(x,ng) {
 #----------------------------------------------------
 # function to calculate gene family frequency spectrum
 # for the IMG model on a coalescent
 # given A1) deletion rate class 1 (rho1)
 #       A2) insertion rate class 1 (theta1)
-#       A3) number of essential genes
+#       A3) number of essential genes (gess)
 #       A4) deletion rate class 2 (rho2)
 #       A5) insertion rate class 2 (theta2)
 #	B) number of genomes
-# 1D (rho1,theta1), 1D+E (rho1,theta1,ness), 2D (rho1,theta1,0,rho2,theta2), 2D+E (rho1,theta1,ness,rho2,theta2)
+# 1D (rho1,theta1), 1D+E (rho1,theta1,gess), 2D (rho1,theta1,0,rho2,theta2), 2D+E (rho1,theta1,gess,rho2,theta2)
 #----------------------------------------------------
-f.coalescent.spec <- function(x,ng) {
+
   rho1 <- x[1]
   theta1 <- x[2]
 
-if (is.na(x[3])) {ness<-0} else {ness <- x[3]}
-if (is.na(x[4])) {theta2<-0;rho2<-1} else {rho2 <- x[4];theta2 <- x[5]}
+  if (is.na(x[3])) {gess<-0} else {gess <- x[3]}
+  if (is.na(x[4])) {theta2<-0;rho2<-1} else {rho2 <- x[4];theta2 <- x[5]}
 
-spec <- (1:ng)*0
+  spec <- (1:ng)*0
 
-specprod1 <- (ng-1:ng+1)/(ng-1:ng+rho1)
-if (theta2 > 0) {
-  specprod2 <- (ng-1:ng+1)/(ng-1:ng+rho2)
-} else {
-  specprod2 <- 0*1:ng
+  specprod1 <- (ng-1:ng+1)/(ng-1:ng+rho1)
+  if (theta2 > 0) {
+    specprod2 <- (ng-1:ng+1)/(ng-1:ng+rho2)
+  } else {
+    specprod2 <- 0*1:ng
+  }
+
+  for (k in 1:ng) {
+  spec[k] <- (theta1/k)*prod(specprod1[1:k]) + (theta2/k)*prod(specprod2[1:k])
+  }
+
+  spec[ng] <- spec[ng] + gess
+
+  return(spec)
 }
 
-for (k in 1:ng) {
-spec[k] <- (theta1/k)*prod(specprod1[1:k]) + (theta2/k)*prod(specprod2[1:k])
-}
-
-spec[ng] <- spec[ng] + ness
-
-return(spec)
-}
-
+##---------------------------------------------------
+f.star <- function(x,ng) {
 #----------------------------------------------------
 # function to calculate stationary distribution of 
 # the IMG model on a star tree
 # given A1) deletion rate class 1 (vt1)
 #       A2) insertion rate class 1 (ut1)
-#       A3) number of essential genes
+#       A3) number of essential genes (gess)
 #       A4) deletion rate class 2 (vt2)
 #       A5) insertion rate class 2 (ut2)
 #	B) number of genomes
-# 1D (vt1,ut1), 1D+E (vt1,ut1,ness), 2D (vt1,ut1,0,vt2,ut2), 2D+E (vt1,ut1,ness,vt2,ut2)
+# 1D (vt1,ut1), 1D+E (vt1,ut1,gess), 2D (vt1,ut1,0,vt2,ut2), 2D+E (vt1,ut1,gess,vt2,ut2)
 #----------------------------------------------------
-f.star <- function(x,ng) {
 
-vt1 <- x[1] #v*t
-ut1 <- x[2]
+  vt1 <- x[1] #v*t
+  ut1 <- x[2]
 
-if (is.na(x[3])) {ness<-0} else {ness<- x[3]}
-if (is.na(x[4])) {ut2<-0;vt2<-1} else {vt2 <- x[4];ut2 <- x[5]}
+  if (is.na(x[3])) {gess<-0} else {gess<- x[3]}
+  if (is.na(x[4])) {ut2<-0;vt2<-1} else {vt2 <- x[4];ut2 <- x[5]}
 
-core <- (1:ng)*0
-pangenome <- (1:ng)*0
-core[1] <- ut1/vt1 + ut2/vt2
-pangenome[1] <- ut1/vt1 + ut2/vt2
+  core <- (1:ng)*0
+  pangenome <- (1:ng)*0
+  core[1] <- ut1/vt1 + ut2/vt2 + gess
+  pangenome[1] <- ut1/vt1 + ut2/vt2
 
-for (k in 2:ng) {
-  core[k] <- (ut1/vt1)*exp(-k*vt1) + (ut2/vt2)*exp(-k*vt2) + ness
-  pangenome[k] <- (ut1/vt1)*(1 + k*(1 - exp(-vt1)) - (1-exp(-vt1))^k) + (ut2/vt2)*(1 + k*(1 - exp(-vt2)) - (1-exp(-vt2))^k) + ness
+  for (k in 2:ng) {
+    core[k] <- (ut1/vt1)*exp(-k*vt1) + (ut2/vt2)*exp(-k*vt2) + gess
+    pangenome[k] <- (ut1/vt1)*(1 + k*(1 - exp(-vt1)) - (1-exp(-vt1))^k) + (ut2/vt2)*(1 + k*(1 - exp(-vt2)) - (1-exp(-vt2))^k) + gess
+  }
+
+  return(list("pan"=pangenome,"core"=core))
 }
 
-return(list("pan"=pangenome,"core"=core))
-}
-
+##---------------------------------------------------
+f.getdesc <- function(tree,node) {
 #----------------------------------------------------
 # Function to get the number of descendent nodes
 # from a tree in treetable format
 #----------------------------------------------------
-f.getdesc <- function(tree,node) {
+
   nodes <- node
   diffnodes <- 1
   while(diffnodes>0) {
@@ -222,25 +234,59 @@ f.getdesc <- function(tree,node) {
     nodes <- sort(unique(nodes))
     diffnodes <- length(nodes) - oldnodes
   }
-nodes <- nodes[-which(nodes==0)]
-nodes <- nodes[-which(nodes==node)]
-return(length(nodes))
+  nodes <- nodes[-which(nodes==0)]
+  nodes <- nodes[-which(nodes==node)]
+  return(length(nodes))
 }
 
+##---------------------------------------------------
+f.dprot <- function(tree,ng) {
+#----------------------------------------------------
+# Function to get the average distance from the ancestor
+# to each node in a tree in treetable format
+#----------------------------------------------------
+
+  dists <- 1:ng*0;
+  for (leaf in 1:ng) {
+      dists[leaf] <- dists[leaf] + tree[leaf,'dist']
+      ancestor <- which(tree[,1:2]==leaf,arr.ind=TRUE)[1]
+      while(!is.na(ancestor)) {
+	dists[leaf] <- dists[leaf] + tree[ancestor,'dist']
+	ancestor <- which(tree[,1:2]==ancestor,arr.ind=TRUE)[1]
+      }
+  }
+  return(mean(dists))
+}
+
+##---------------------------------------------------
+f.rms <- function(expected,observed) {
+#----------------------------------------------------
+# Function to calculate root-mean-square value
+#----------------------------------------------------
+
+  if(is.null(dim(observed))) {
+      sqrt( sum( (expected - observed)^2 ) /length(expected) )
+  } else {
+      sqrt( colSums( (expected - observed)^2 ) /length(expected) )
+  }
+}
+
+##---------------------------------------------------
+f.fixed.spec <- function(x,treetable) {
 #----------------------------------------------------
 # Function to compute unconstrained gene frequency spectrum on a fixed tree
 # given x[1] deletion rate class 1 (vt1)
 #       x[2] insertion rate class 1 (ut1)
-#       x[3] number of essential genes
+#       x[3] number of essential genes (gess)
 #       x[4] deletion rate class 2 (vt2)
 #       x[5] insertion rate class 2 (ut2)
 #	treetable table of distances and daughters
-# 1D (vt1,ut1), 1D+E (vt1,ut1,ness), 2D (vt1,ut1,0,vt2,ut2), 2D+E (vt1,ut1,ness,vt2,ut2)
+# 1D (vt1,ut1), 1D+E (vt1,ut1,gess), 2D (vt1,ut1,0,vt2,ut2), 2D+E (vt1,ut1,gess,vt2,ut2)
 #----------------------------------------------------
-f.fixed.spec <- function(x,treetable) {
+
   v1 <- x[1]
   u1 <- x[2]
-  if (is.na(x[3])) {ness<-0} else {ness<-x[3]}
+  if (is.na(x[3])) {gess<-0} else {gess<-x[3]}
   if (is.na(x[4])) {v2<-1;u2<-0} else {v2<-x[4];u2<-x[5]}
 
   nn <- nrow(treetable) #number of nodes
@@ -316,30 +362,36 @@ f.fixed.spec <- function(x,treetable) {
     } #end p_a(k)
   } #end for a
 
-#can also get k=0 out of this?? number of extinct genes?
-Gk1 <- unlist(sapply(1:ng,function(k) {
-  sum(unlist(sapply(1:nn,function(a) {
-    gexp1[a]*gprob1[a,k+1]
-    })))
-}))
+  Gk1 <- unlist(sapply(1:ng,function(k) {
+    sum(unlist(sapply(1:nn,function(a) {
+      gexp1[a]*gprob1[a,k+1]
+      })))
+  }))
 
-Gk2 <- unlist(sapply(1:ng,function(k) {
-  sum(unlist(sapply(1:nn,function(a) {
-    gexp2[a]*gprob2[a,k+1]
-    })))
-}))
+  Gk2 <- unlist(sapply(1:ng,function(k) {
+    sum(unlist(sapply(1:nn,function(a) {
+      gexp2[a]*gprob2[a,k+1]
+      })))
+  }))
 
-Gk <- Gk1 + Gk2
-Gk[ng] <- Gk[ng]+ness
+  Gk <- Gk1 + Gk2
+  Gk[ng] <- Gk[ng]+gess
 
-return(Gk)
+  return(Gk)
 }
+
+retain <- function(v,t) {
 # Let the probability that a family is retained for a time $t$ be $r(t) = e^{-v t}$
-retain <- function(v,t) {exp(-v*t)}
+  exp(-v*t)
+}
+lose <- function(v,t) {
 # let the probability that it is lost during time $t$ be $l(t) = 1 - e^{-v t}$
-lose <- function(v,t) {1 - exp(-v*t)}
+  1 - exp(-v*t)
+}
 
 
+##---------------------------------------------------
+f.fit <- function(x,data,constr,treetype=mytree,fitting=myfitting,genomesize=NA,treetable=NA,ng=NA) {
 #--------------------------------------
 # Fitting function
 # using Chi^2 or Sum of Squares
@@ -349,85 +401,117 @@ lose <- function(v,t) {1 - exp(-v*t)}
 # param tree=coalescent, star, or fixed
 # param constr=1 (constrained) or 0 (unconstrained) to G0
 #--------------------------------------
-f.fit <- function(x,constr,data,treetype,fitting,genomesize=NA,treetable=NA,ng=NA) {
 
-if (constr==1) {
-  if (length(x)==1) { # 1D constrained
-    v1 <- x[1]
-    u1 <- v1*genomesize
-    v2 <- 255
-    ness <- 0
-    u2 <- 0
-  } else if (length(x)==2) { # 1D+E constrained
-    v1 <- x[1]
-    u1 <- v1*genomesize
-    v2 <- 255
-    ness <- x[2]
-    u2 <- 0
-  } else if (length(x)==3) { # 2D constrained
-    v1 <- x[1]
-    u1 <- x[2]
-    v2 <- x[3]
-    ness <- 0
-    u2 <- v2*(genomesize-u1/v1)
-  } else if (length(x)==4) { # 2D+E constrained
-    v1 <- x[1]
-    u1 <- x[2]
-    ness <- x[3]
-    v2 <- x[4]
-    u2 <- v2*(genomesize-u1/v1-ness)
+  if (constr==1) {
+    if (length(x)==1) { # 1D constrained
+      v1 <- x[1]
+      u1 <- v1*genomesize
+      v2 <- 255
+      gess <- 0
+      u2 <- 0
+    } else if (length(x)==2) { # 1D+E constrained
+      v1 <- x[1]
+      u1 <- v1*genomesize
+      v2 <- 255
+      gess <- x[2]
+      u2 <- 0
+    } else if (length(x)==3) { # 2D constrained
+      v1 <- x[1]
+      u1 <- x[2]
+      v2 <- x[3]
+      gess <- 0
+      u2 <- v2*(genomesize-u1/v1)
+    } else if (length(x)==4) { # 2D+E constrained
+      v1 <- x[1]
+      u1 <- x[2]
+      gess <- x[3]
+      v2 <- x[4]
+      u2 <- v2*(genomesize-u1/v1-gess)
+    } else {return(NA)}
+  } else if (constr==0) {
+    if (length(x)==2) { # 1D unconstrained
+      v1 <- x[1]
+      u1 <- x[2]
+      v2 <- 255
+      gess <- 0
+      u2 <- 0
+    } else if (length(x)==3) { # 1D+E unconstrained
+      v1 <- x[1]
+      u1 <- x[2]
+      gess <- x[3]
+      v2 <- 255
+      u2 <- 0
+    } else if (length(x)==4) { # 2D unconstrained
+      v1 <- x[1]
+      u1 <- x[2]
+      gess <- 0
+      v2 <- x[3]
+      u2 <- x[4]
+    } else if (length(x)==5) { # 2D+E unconstrained
+      v1 <- x[1]
+      u1 <- x[2]
+      gess <- x[3]
+      v2 <- x[4]
+      u2 <- x[5]
+    } else {return(NA)}
+  }
+
+  pars <- c(v1,u1,gess,v2,u2)
+
+  if (v1>v2 || any(pars<0) ) {return(6.022e23)}
+
+  if (treetype=="fixed.spec") {
+    theory <- f.fixed.spec(pars,treetable)
+  } else if (treetype=="fixed") {
+    result <- f.meanpancore(f.fixed.spec(pars,treetable))
+    theory <- c(result$pan,result$core)
+  } else if (treetype=="coalescent.spec") {
+    theory <- f.coalescent.spec(pars,ng)
+  } else if (treetype=="coalescent") {
+    result <- f.coalescent(pars,ng)
+    theory <- c(result$pan,result$core)
+  } else if (treetype=="star") {
+    result <- f.star(pars,ng)
+    theory <- c(result$pan,result$core)
   } else {return(NA)}
-} else if (constr==0) {
-  if (length(x)==2) { # 1D unconstrained
-    v1 <- x[1]
-    u1 <- x[2]
-    v2 <- 255
-    ness <- 0
-    u2 <- 0
-  } else if (length(x)==3) { # 1D+E unconstrained
-    v1 <- x[1]
-    u1 <- x[2]
-    ness <- x[3]
-    v2 <- 255
-    u2 <- 0
-  } else if (length(x)==4) { # 2D unconstrained
-    v1 <- x[1]
-    u1 <- x[2]
-    ness <- 0
-    v2 <- x[3]
-    u2 <- x[4]
-  } else if (length(x)==5) { # 2D+E unconstrained
-    v1 <- x[1]
-    u1 <- x[2]
-    ness <- x[3]
-    v2 <- x[4]
-    u2 <- x[5]
-  } else {return(NA)}
+
+  if (fitting=="chi2") {value <- sum((theory-data)^2/data)}
+  else if (fitting=="sumsq") {value <- sum((theory-data)^2)}
+  else {return(NA)}
+  # lines(theory,col='grey')
+  return(value)
 }
 
-pars <- c(v1,u1,ness,v2,u2)
+##-------------------------------------------------
+f.recurse <- function(pinitial,r.data,r.constr=constr,r.treetype=mytree,r.fitting=myfitting,r.genomesize=genomesize,r.treetable=treetable,r.ng=ng,r.method=mymethod) {
+#--------------------------------------
+# Recursive Fitting metafunction
+# takes initial parameters and data to fit
+# uses best fit from previous iteration
+# to start new iteration up to 10x
+#--------------------------------------
+  saved <- NULL
+  while(length(saved$value)<10) {
+    print(saved$value)
+    if(is.null(saved)) { params <- pinitial
+    } else { params <- opt$par #recursive
+    }
+    opt <- optim(
+      params,
+      function(x) f.fit(x,data=r.data,constr=r.constr,treetype=r.treetype,fitting=r.fitting,treetable=r.treetable,genomesize=r.genomesize,ng=r.ng),
+      method=r.method,
+      control=list(trace=0,parscale=params+1e-6,maxit=10000)
+    )
+    if(opt$convergence>0) {warn("did not converge!")}
 
-if (v1>v2 || any(pars<0) ) {return(6.022e23)}
+    saved <- rbind(saved,as.data.frame(t(unlist(opt))))
 
-if (treetype=="fixed.spec") {
-  theory <- f.fixed.spec(pars,treetable)
-} else if (treetype=="fixed") {
-  result <- f.meanpancore(f.fixed.spec(pars,treetable))
-  theory <- c(result$pan,result$core)
-} else if (treetype=="coalescent.spec") {
-  theory <- f.coalescent.spec(pars,ng)
-} else if (treetype=="coalescent") {
-  result <- f.coalescent(pars,ng)
-  theory <- c(result$pan,result$core)
-} else if (treetype=="star") {
-  result <- f.star(pars,ng)
-  theory <- c(result$pan,result$core)
-} else {return(NA)}
+    if (dim(saved)[1] > 2) {
+      if (identical(all.equal(sort(saved$value)[3],sort(saved$value)[1]),TRUE)) {
+	break;
+      }
+    }
+  }
 
-if (fitting=="chi2") {value <- sum((theory-data)^2/data)}
-else if (fitting=="sumsq") {value <- sum((theory-data)^2)}
-else {return(NA)}
-# lines(theory,col='grey')
-return(value)
-
+return(opt)
 }

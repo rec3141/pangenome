@@ -9,6 +9,10 @@ if (@ARGV==0) {
 print "This program takes:
 1) a file containing a Newick format tree (required)
 2) a file containing a list of refseq ids matching those in the tree (optional)
+
+and outputs:
+1) a treetable (for input into pangenome functions)
+2) a full distance matrix (optional)
 \n";
 exit 0;
 }
