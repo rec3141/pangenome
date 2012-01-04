@@ -1,7 +1,7 @@
 ##---------------------------------------------------
 f.getspectrum <- function(mat) {
 #----------------------------------------------------
-# Function to compute gene frequency spectrum
+# Function to compute gene family frequency spectrum
 # given a matrix of gene clusters
 #----------------------------------------------------
   ng <- dim(mat)[2]
@@ -136,7 +136,7 @@ f.coalescent <- function(x,ng) {
 
   for (k in 1:ng) {
   #size of pan-genome after sampling K genomes from N
-    pangenome[k] <- theta1 * sum(1/(rho1-1+1:k)) + theta2*sum(1/(rho2-1+1:k)) + gess
+    pangenome[k] <- theta1 * sum(1/(rho1-1+1:k)) + theta2 * sum(1/(rho2-1+1:k)) + gess
 
     specprod1 <- (k-1:k+1)/(k-1:k+rho1)
     specprod2 <- (k-1:k+1)/(k-1:k+rho2)
@@ -209,7 +209,7 @@ f.star <- function(x,ng) {
   core <- (1:ng)*0
   pangenome <- (1:ng)*0
   core[1] <- ut1/vt1 + ut2/vt2 + gess
-  pangenome[1] <- ut1/vt1 + ut2/vt2
+  pangenome[1] <- ut1/vt1 + ut2/vt2 + gess
 
   for (k in 2:ng) {
     core[k] <- (ut1/vt1)*exp(-k*vt1) + (ut2/vt2)*exp(-k*vt2) + gess
@@ -289,6 +289,7 @@ f.fixed.spec <- function(x,treetable) {
   if (is.na(x[3])) {gess<-0} else {gess<-x[3]}
   if (is.na(x[4])) {v2<-1;u2<-0} else {v2<-x[4];u2<-x[5]}
 
+  treetable <- cbind(treetable,"v1.lose"=lose(v1,treetable$dist),"v2.lose"=lose(v2,treetable$dist),"v1.retain"=retain(v1,treetable$dist),"v2.retain"=retain(v2,treetable$dist))
   nn <- nrow(treetable) #number of nodes
   ng <- (nn+1)/2 #number of genomes if bifurcating tree
   nd <- NA*1:nn #number of descendent nodes not counting itself
@@ -317,8 +318,8 @@ f.fixed.spec <- function(x,treetable) {
       gexp1[a] <- u1/v1
       gexp2[a] <- u2/v2
     } else {
-      gexp1[a] <- (u1/v1) * (1-exp(-v1*treetable$dist[a]))
-      gexp2[a] <- (u2/v2) * (1-exp(-v2*treetable$dist[a]))
+      gexp1[a] <- (u1/v1) * treetable$v1.lose[a]
+      gexp2[a] <- (u2/v2) * treetable$v2.lose[a]
     }
 
     # gprob[a,k+1] is the probability that a family present at 'a'
@@ -336,27 +337,27 @@ f.fixed.spec <- function(x,treetable) {
       # calculate gprob[a,k+1] for 0 <= k <= ndg[a]
 	desc_a <- treetable$desc_a[a]
 	desc_b <- treetable$desc_b[a]
-	t_a <- treetable$dist[desc_a]
-	t_b <- treetable$dist[desc_b]
+# 	t_a <- treetable$dist[desc_a]
+# 	t_b <- treetable$dist[desc_b]
 
 	#for k = 0
-	gprob1[a,k+1] <- (lose(v1,t_a) + retain(v1,t_a) * gprob1[desc_a,k+1]) *
-			 (lose(v1,t_b) + retain(v1,t_b) * gprob1[desc_b,k+1])
-	gprob2[a,k+1] <- (lose(v2,t_a) + retain(v2,t_a) * gprob2[desc_a,k+1]) *
-			 (lose(v2,t_b) + retain(v2,t_b) * gprob2[desc_b,k+1])
+	gprob1[a,k+1] <- (treetable$v1.lose[desc_a] + treetable$v1.retain[desc_a] * gprob1[desc_a,k+1]) *
+			 (treetable$v1.lose[desc_b] + treetable$v1.retain[desc_b] * gprob1[desc_b,k+1])
+	gprob2[a,k+1] <- (treetable$v2.lose[desc_a] + treetable$v2.retain[desc_a] * gprob2[desc_a,k+1]) *
+			 (treetable$v2.lose[desc_b] + treetable$v2.retain[desc_b] * gprob2[desc_b,k+1])
 
 	#for 1 <= k <= ndg[a]
 	for (k in 1:ndg[a]) {
 	  gprob1[a,k+1] <- 
-	    retain(v1,t_a)*lose(v1,t_b)*gprob1[desc_a,k+1] +
-	    retain(v1,t_b)*lose(v1,t_a)*gprob1[desc_b,k+1] +
-	    retain(v1,t_a)*retain(v1,t_b)*
+	    treetable$v1.retain[desc_a]*treetable$v1.lose[desc_b]*gprob1[desc_a,k+1] +
+	    treetable$v1.retain[desc_b]*treetable$v1.lose[desc_a]*gprob1[desc_b,k+1] +
+	    treetable$v1.retain[desc_a]*treetable$v1.retain[desc_b]*
 	    sum(unlist(sapply(0:k,function(j) gprob1[desc_a,j+1]*gprob1[desc_b,k-j+1])))
 
 	  gprob2[a,k+1] <- 
-	    retain(v2,t_a)*lose(v2,t_b)*gprob2[desc_a,k+1] +
-	    retain(v2,t_b)*lose(v2,t_a)*gprob2[desc_b,k+1] +
-	    retain(v2,t_a)*retain(v2,t_b)*
+	    treetable$v2.retain[desc_a]*treetable$v2.lose[desc_b]*gprob2[desc_a,k+1] +
+	    treetable$v2.retain[desc_b]*treetable$v2.lose[desc_a]*gprob2[desc_b,k+1] +
+	    treetable$v2.retain[desc_a]*treetable$v2.retain[desc_b]*
 	    sum(unlist(sapply(0:k,function(j) gprob2[desc_a,j+1]*gprob2[desc_b,k-j+1])))
 	}
     } #end p_a(k)
@@ -391,7 +392,7 @@ lose <- function(v,t) {
 
 
 ##---------------------------------------------------
-f.fit <- function(x,data,constr,treetype=mytree,fitting=myfitting,genomesize=NA,treetable=NA,ng=NA) {
+f.fit <- function(x,data,constr,modeltype=mymodel,fitting=myfitting,genomesize=NA,treetable=NA,ng=NA) {
 #--------------------------------------
 # Fitting function
 # using Chi^2 or Sum of Squares
@@ -402,6 +403,7 @@ f.fit <- function(x,data,constr,treetype=mytree,fitting=myfitting,genomesize=NA,
 # param constr=1 (constrained) or 0 (unconstrained) to G0
 #--------------------------------------
 
+  if (any(x<0)) {return(NA)}
   if (constr==1) {
     if (length(x)==1) { # 1D constrained
       v1 <- x[1]
@@ -411,9 +413,9 @@ f.fit <- function(x,data,constr,treetype=mytree,fitting=myfitting,genomesize=NA,
       u2 <- 0
     } else if (length(x)==2) { # 1D+E constrained
       v1 <- x[1]
-      u1 <- v1*genomesize
-      v2 <- 255
       gess <- x[2]
+      u1 <- v1*(genomesize-gess)
+      v2 <- 255
       u2 <- 0
     } else if (length(x)==3) { # 2D constrained
       v1 <- x[1]
@@ -456,21 +458,21 @@ f.fit <- function(x,data,constr,treetype=mytree,fitting=myfitting,genomesize=NA,
     } else {return(NA)}
   }
 
-  pars <- c(v1,u1,gess,v2,u2)
+  pars <- c(v1,u1,gess,v2,u2) #rho1,theta1,gess,rho2,theta2
+#   print(pars)
+  if (v1>v2 || any(pars<0) ) {return(NA)}
 
-  if (v1>v2 || any(pars<0) ) {return(6.022e23)}
-
-  if (treetype=="fixed.spec") {
+  if (modeltype=="fixed.spec") {
     theory <- f.fixed.spec(pars,treetable)
-  } else if (treetype=="fixed") {
+  } else if (modeltype=="fixed") {
     result <- f.meanpancore(f.fixed.spec(pars,treetable))
     theory <- c(result$pan,result$core)
-  } else if (treetype=="coalescent.spec") {
+  } else if (modeltype=="coalescent.spec") {
     theory <- f.coalescent.spec(pars,ng)
-  } else if (treetype=="coalescent") {
+  } else if (modeltype=="coalescent") {
     result <- f.coalescent(pars,ng)
     theory <- c(result$pan,result$core)
-  } else if (treetype=="star") {
+  } else if (modeltype=="star") {
     result <- f.star(pars,ng)
     theory <- c(result$pan,result$core)
   } else {return(NA)}
@@ -483,7 +485,7 @@ f.fit <- function(x,data,constr,treetype=mytree,fitting=myfitting,genomesize=NA,
 }
 
 ##-------------------------------------------------
-f.recurse <- function(pinitial,r.data,r.constr=constr,r.treetype=mytree,r.fitting=myfitting,r.genomesize=genomesize,r.treetable=treetable,r.ng=ng,r.method=mymethod) {
+f.recurse <- function(pinitial,r.data,r.constr=constr,r.modeltype=mymodel,r.fitting=myfitting,r.genomesize=genomesize,r.treetable=treetable,r.ng=ng,r.method=mymethod) {
 #--------------------------------------
 # Recursive Fitting metafunction
 # takes initial parameters and data to fit
@@ -498,11 +500,11 @@ f.recurse <- function(pinitial,r.data,r.constr=constr,r.treetype=mytree,r.fittin
     }
     opt <- optim(
       params,
-      function(x) f.fit(x,data=r.data,constr=r.constr,treetype=r.treetype,fitting=r.fitting,treetable=r.treetable,genomesize=r.genomesize,ng=r.ng),
+      function(x) f.fit(x,data=r.data,constr=r.constr,modeltype=r.modeltype,fitting=r.fitting,treetable=r.treetable,genomesize=r.genomesize,ng=r.ng),
       method=r.method,
       control=list(trace=0,parscale=params+1e-6,maxit=10000)
     )
-    if(opt$convergence>0) {warn("did not converge!")}
+    if(opt$convergence>0) {warning("did not converge!")}
 
     saved <- rbind(saved,as.data.frame(t(unlist(opt))))
 

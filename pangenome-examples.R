@@ -37,9 +37,9 @@ source("f-pangenome.R")
 
 # read in matrix of all Bacilli gene clusters
 # less strict clustering (default):
-infile <- "Bacilli-clusters.1e-10.6.csv"
+# infile <- "Bacilli-clusters.1e-10.6.csv"
 # more strict clustering:
-# infile <- "Bacilli-clusters.1e-30.7.csv"
+infile <- "Bacilli-clusters.1e-30.7.csv"
 mat.all <- read.csv(infile,sep="\t")
 mat.read <- mat.all[,3+1:(dim(mat.all)[2]-7)] #remove annotations
 
@@ -58,9 +58,8 @@ for (mykey in allkeys) {
   print(taxaname)
   # get the columns which are of interest
   mycols <- unique(unlist(lapply(keys[,2],function(x) grep(x,colnames(mat.read)))))
-  mat.num <- mat.read[,mycols]
   # get a matrix of clusters containing gene families in the genomes of interest
-  mat <- mat.num[rowSums(mat.num)>0,]
+  mat <- mat.read[rowSums(mat.read)>0,mycols]
 
   genomesize <- mean(colSums(mat>0)) # mean genome size measured in gene families
   ng <- dim(mat)[2] #number of genomes
@@ -74,14 +73,24 @@ for (mykey in allkeys) {
   ## Table 1 -- genome properties
   ##---------------------------------
 
-  Ngenes <- mean(colSums(mat.num)) # mean number of genes
-  G0 <- mean(colSums(mat)) # mean number of gene families
-  Gcore <- sum(which(rowSums(mat)==ng)) # mean core size
+  Ngenes <- mean(colSums(mat)) # mean number of genes
+  G0 <- mean(colSums(mat>0)) # mean number of gene families
+  Gcore <- length(which(rowSums(mat>0)==ng)) # mean core size
   Gpan <- nrow(mat) #pangenome size
   dprot <- f.dprot(treetable,ng) # mean distance from LCA
 
   # add results to Table1
-  table1 <- rbind(table1,cbind(taxaname,ng,Ngenes,G0,Ngenes/G0,Gcore,G0/Gcore,Gpan,G0/Gpan,dprot))
+  table1 <- rbind(table1,cbind(
+    taxaname,
+    ng,
+    Ngenes,
+    G0,
+    Ngenes/G0,
+    Gcore,
+    Gcore/G0,
+    Gpan,
+    Gpan/G0,
+    dprot))
 
   ##-------------------------------------------
   ## Fit to the Gene Family Frequency Spectrum
@@ -97,17 +106,17 @@ for (mykey in allkeys) {
   ## Predict the gene family frequency spectrum
   ## using model 1D+E on a coalescent
 
-  mytree <- "coalescent.spec" #use the coalescent tree w/G(k)
+  mymodel <- "coalescent.spec" #use the coalescent tree w/G(k)
   myfitting <- "chi2" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   # !! if constr changes, need to change input parameters as well
-  mymethod <- "Nelder" # alternative fitting routine: "BFGS"
+  mymethod <- "BFGS" # alternative fitting routine: "BFGS"
 
   #set initial parameters and recursively optimize
   opt.spec.cde <- f.recurse(c(1,100),r.data=Gk)
 
   # get optimized parameters, calculate constrained parameter
-  params.spec.cde <- c(opt.spec.cde$par[1],opt.spec.cde$par[1]*genomesize,opt.spec.cde$par[2])
+  params.spec.cde <- c(opt.spec.cde$par[1],opt.spec.cde$par[1]*(genomesize-opt.spec.cde$par[2]),opt.spec.cde$par[2])
 
   print(params.spec.cde)
   spec.cde <- f.coalescent.spec(params.spec.cde,ng)
@@ -116,15 +125,15 @@ for (mykey in allkeys) {
   ## Predict the gene family frequency spectrum
   ## using model 2D+E on a coalescent
 
-  mytree <- "coalescent.spec" #use the coalescent tree w/G(k)
+  mymodel <- "coalescent.spec" #use the coalescent tree w/G(k)
   myfitting <- "chi2" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   # !! if constr changes, need to change input parameters as well
-  mymethod <- "Nelder" # alternative fitting routine: "BFGS"
+  mymethod <- "BFGS" # alternative fitting routine: "BFGS"
 
   #set initial parameters and recursively optimize
-  pinitial.spec.c2de <- c(params.spec.cde[1]/100,params.spec.cde[2]/1000,params.spec.cde[3],params.spec.cde[1])
-  opt.spec.c2de <- f.recurse(pinitial.spec.c2de,r.data=Gk) 
+  pinitial.spec.c2de <- c(params.spec.cde[1]/10,params.spec.cde[2]/100,params.spec.cde[3],params.spec.cde[1])
+  opt.spec.c2de <- f.recurse(pinitial.spec.c2de,r.data=Gk)
 
   # get optimized parameters, calculate constrained parameter
   params.spec.c2de <- c(opt.spec.c2de$par,opt.spec.c2de$par[4]*(genomesize-opt.spec.c2de$par[2]/opt.spec.c2de$par[1]-opt.spec.c2de$par[3]))
@@ -135,14 +144,15 @@ for (mykey in allkeys) {
   ## Predict the gene family frequency spectrum
   ## using model 2D+E on a fixed tree
 
-  mytree <- "fixed.spec" #use a fixed tree w/G(k)
+  mymodel <- "fixed.spec" #use a fixed tree w/G(k)
   myfitting <- "chi2" #fit it using chi2 or sumsq
   constr <- 1 # G0 constrained to the mean genome size during fitting;
   # !! if constr changes, need to change input parameters as well
-  mymethod <- "Nelder" # alternative fitting routines: "BFGS","Nelder"
+  mymethod <- "BFGS" # alternative fitting routines: "BFGS","Nelder"
 
   #set initial parameters and recursively optimize
-  opt.spec.f2de <- f.recurse(opt.spec.c2de$par,r.data=Gk) 
+  pinitial.spec.f2de <- opt.spec.c2de$par/c(10,10,1,1)
+  opt.spec.f2de <- f.recurse(pinitial.spec.f2de,r.data=Gk)
 
   # get optimized parameters, calculate constrained parameter
   params.spec.f2de <- c(opt.spec.f2de$par,opt.spec.f2de$par[4]*(genomesize-opt.spec.f2de$par[2]/opt.spec.f2de$par[1]-opt.spec.f2de$par[3]))
@@ -185,11 +195,32 @@ for (mykey in allkeys) {
   points(1:ng,mean.core)
 
   ## Predict the core and pangenome curves
+  ## using model 1D+E on a coalescent tree
+
+  mymodel <- "coalescent" #use the coalescent tree w/pancore
+  myfitting <- "chi2" #fit it using the Chi^2
+  constr <- 1 # G0 constrained to the mean genome size during fitting
+  mymethod <- "Nelder" # alternative fitting routine: "Nelder"
+
+  # recursively optimize using initial parameters and dataset to fit
+  opt.cde <- f.recurse(opt.spec.cde$par,r.data=pancore)
+
+  # get optimized parameters and calculate constrained param
+  params.cde <- c(opt.cde$par[1], opt.cde$par[1]*(genomesize-opt.cde$par[2]), opt.cde$par[2])
+  print(params.cde)
+  pancore.cde <- f.coalescent(params.cde,ng)
+  rms.cde <- f.rms(c(mean.pangenome,mean.core),c(pancore.cde$pan,pancore.cde$core))
+
+  # Add the predicted curves to the plot
+#   lines(1:ng,pancore.cde$pan,col='red',lty=2,lwd=2)
+#   lines(1:ng,pancore.cde$core,col='red',lty=2,lwd=2)
+
+  ## Predict the core and pangenome curves
   ## using model 2D+E on a coalescent tree
 
-  mytree<-"coalescent" #use the coalescent tree w/G(k)
-  myfitting<-"chi2" #fit it using the Chi^2
-  constr<- 1 # G0 constrained to the mean genome size during fitting
+  mymodel <- "coalescent" #use the coalescent tree w/G(k)
+  myfitting <- "chi2" #fit it using the Chi^2
+  constr <- 1 # G0 constrained to the mean genome size during fitting
   mymethod <- "Nelder" # alternative fitting routine: "Nelder"
 
   # recursively optimize using initial parameters and dataset to fit
@@ -208,7 +239,7 @@ for (mykey in allkeys) {
   ## Predict the core and pangenome curves
   ## using model 2D+E on a star tree
 
-  mytree <- "star" #use the coalescent tree w/G(k)
+  mymodel <- "star" #use the coalescent tree w/G(k)
   myfitting <- "chi2" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   mymethod <- "Nelder" # alternative fitting routine: "BFGS","Nelder"
@@ -231,10 +262,10 @@ for (mykey in allkeys) {
   ## using model 2D+E on a fixed tree
   ## (calculated via the gene frequency spectrum)
 
-  mytree <- "fixed" #use the coalescent tree w/G(k)
+  mymodel <- "fixed" #use the coalescent tree w/pancore
   myfitting <- "chi2" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
-  mymethod <- "Nelder" # alternative fitting routine: "BFGS"
+  mymethod <- "Nelder" # alternative fitting routine: "BFGS","Nelder"
 
   # recursively optimize using initial parameters and dataset to fit
   opt.f2de <- f.recurse(opt.c2de$par,r.data=pancore)
@@ -257,7 +288,13 @@ for (mykey in allkeys) {
   ## Table 2 -- RMS values for 2D+E fits
   ##----------------------------------------
   # add results to Table 2
-  table2 <- rbind(table2,cbind(taxaname,rms.perm,rms.c2de/rms.perm,rms.s2de/rms.perm,rms.f2de/rms.perm))
+  table2 <- rbind(table2,cbind(
+    taxaname,
+    rms.perm,
+    rms.cde/rms.perm,
+    rms.c2de/rms.perm,
+    rms.s2de/rms.perm,
+    rms.f2de/rms.perm))
 
   ##--------------------------------------------------------
   ## Table 3 -- coalescent 2D+E best fits and predictions
@@ -280,10 +317,25 @@ for (mykey in allkeys) {
   Gcore1000 <- f.coalescent(params.c2de,1000)$core[1000]
 
   # add results to Table 3
-  table3 <- rbind(table3,cbind(taxaname,theta1,rho1,theta2,rho2,Gess,fslow,ffast,Gnew100,Gnew1000,Gcore100,Gcore1000))
+  table3 <- rbind(table3,cbind(
+    taxaname,
+    theta1,
+    rho1,
+    theta2,
+    rho2,
+    Gess,
+    fslow,
+    ffast,
+    Gnew100,
+    Gnew1000,
+    Gcore100,
+    Gcore1000))
 
 } #end allkeys
 
+colnames(table1) <- c("taxaname","ng","Ngenes","G0","Ngenes/G0","Gcore","Gcore/G0","Gpan","Gpan/G0","dprot")
+colnames(table2) <- c("taxaname","RMS(data)","Coalescent 1D+E","Coalescent 2D+E","Star 2D+E","Fixed 2D+E")
+colnames(table3) <- c("taxaname","theta1","rho1","theta2","rho2","Gess","fslow","ffast","Gnew(100)","Gnew(1000)","Gcore(100)","Gcore(1000)")
 write.table(table1,f="table1.csv",sep="\t")
 write.table(table2,f="table2.csv",sep="\t")
 write.table(table3,f="table3.csv",sep="\t")
