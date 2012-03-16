@@ -289,7 +289,7 @@ f.fixed.spec <- function(x,treetable) {
   if (is.na(x[3])) {gess<-0} else {gess<-x[3]}
   if (is.na(x[4])) {v2<-1;u2<-0} else {v2<-x[4];u2<-x[5]}
 
-  treetable <- cbind(treetable,"v1.lose"=lose(v1,treetable$dist),"v2.lose"=lose(v2,treetable$dist),"v1.retain"=retain(v1,treetable$dist),"v2.retain"=retain(v2,treetable$dist))
+  losegain <- cbind(lose(v1,treetable$dist),lose(v2,treetable$dist),retain(v1,treetable$dist),retain(v2,treetable$dist))
   nn <- nrow(treetable) #number of nodes
   ng <- (nn+1)/2 #number of genomes if bifurcating tree
   nd <- NA*1:nn #number of descendent nodes not counting itself
@@ -318,8 +318,8 @@ f.fixed.spec <- function(x,treetable) {
       gexp1[a] <- u1/v1
       gexp2[a] <- u2/v2
     } else {
-      gexp1[a] <- (u1/v1) * treetable$v1.lose[a]
-      gexp2[a] <- (u2/v2) * treetable$v2.lose[a]
+      gexp1[a] <- (u1/v1) * losegain[a,1]
+      gexp2[a] <- (u2/v2) * losegain[a,2]
     }
 
     # gprob[a,k+1] is the probability that a family present at 'a'
@@ -341,23 +341,23 @@ f.fixed.spec <- function(x,treetable) {
 # 	t_b <- treetable$dist[desc_b]
 
 	#for k = 0
-	gprob1[a,k+1] <- (treetable$v1.lose[desc_a] + treetable$v1.retain[desc_a] * gprob1[desc_a,k+1]) *
-			 (treetable$v1.lose[desc_b] + treetable$v1.retain[desc_b] * gprob1[desc_b,k+1])
-	gprob2[a,k+1] <- (treetable$v2.lose[desc_a] + treetable$v2.retain[desc_a] * gprob2[desc_a,k+1]) *
-			 (treetable$v2.lose[desc_b] + treetable$v2.retain[desc_b] * gprob2[desc_b,k+1])
+	gprob1[a,k+1] <- (losegain[desc_a,1] + losegain[desc_a,3] * gprob1[desc_a,k+1]) *
+			 (losegain[desc_b,1] + losegain[desc_b,3] * gprob1[desc_b,k+1])
+	gprob2[a,k+1] <- (losegain[desc_a,2] + losegain[desc_a,4] * gprob2[desc_a,k+1]) *
+			 (losegain[desc_b,2] + losegain[desc_b,4] * gprob2[desc_b,k+1])
 
 	#for 1 <= k <= ndg[a]
 	for (k in 1:ndg[a]) {
 	  gprob1[a,k+1] <- 
-	    treetable$v1.retain[desc_a]*treetable$v1.lose[desc_b]*gprob1[desc_a,k+1] +
-	    treetable$v1.retain[desc_b]*treetable$v1.lose[desc_a]*gprob1[desc_b,k+1] +
-	    treetable$v1.retain[desc_a]*treetable$v1.retain[desc_b]*
+	    losegain[desc_a,3]*losegain[desc_b,1]*gprob1[desc_a,k+1] +
+	    losegain[desc_b,3]*losegain[desc_a,1]*gprob1[desc_b,k+1] +
+	    losegain[desc_a,3]*losegain[desc_b,3]*
 	    sum(unlist(sapply(0:k,function(j) gprob1[desc_a,j+1]*gprob1[desc_b,k-j+1])))
 
 	  gprob2[a,k+1] <- 
-	    treetable$v2.retain[desc_a]*treetable$v2.lose[desc_b]*gprob2[desc_a,k+1] +
-	    treetable$v2.retain[desc_b]*treetable$v2.lose[desc_a]*gprob2[desc_b,k+1] +
-	    treetable$v2.retain[desc_a]*treetable$v2.retain[desc_b]*
+	    losegain[desc_a,4]*losegain[desc_b,2]*gprob2[desc_a,k+1] +
+	    losegain[desc_b,4]*losegain[desc_a,2]*gprob2[desc_b,k+1] +
+	    losegain[desc_a,4]*losegain[desc_b,4]*
 	    sum(unlist(sapply(0:k,function(j) gprob2[desc_a,j+1]*gprob2[desc_b,k-j+1])))
 	}
     } #end p_a(k)
@@ -477,15 +477,17 @@ f.fit <- function(x,data,constr,modeltype=mymodel,fitting=myfitting,genomesize=N
     theory <- c(result$pan,result$core)
   } else {return(NA)}
 
-  if (fitting=="chi2") {value <- sum((theory-data)^2/data)}
-  else if (fitting=="sumsq") {value <- sum((theory-data)^2)}
-  else {return(NA)}
+  if (fitting=="sumsq") { value <- sum((theory-data)^2)
+  } else if (fitting=="rms") { value <- sqrt( sum( (theory - data)^2 ) /length(theory) )
+
+  } else if (fitting=="chi2") { value <- sum((theory-data)^2/theory)
+  } else {return(NA)}
   # lines(theory,col='grey')
   return(value)
 }
 
 ##-------------------------------------------------
-f.recurse <- function(pinitial,r.data,r.constr=constr,r.modeltype=mymodel,r.fitting=myfitting,r.genomesize=genomesize,r.treetable=treetable,r.ng=ng,r.method=mymethod) {
+f.recurse <- function(pinitial,r.data,r.constr=constr,r.modeltype=mymodel,r.fitting=myfitting,r.genomesize=genomesize,r.treetable=treetable,r.ng=ng,r.method=mymethod,r.maxit=10000,r.reltol=1e-6) {
 #--------------------------------------
 # Recursive Fitting metafunction
 # takes initial parameters and data to fit
@@ -494,7 +496,6 @@ f.recurse <- function(pinitial,r.data,r.constr=constr,r.modeltype=mymodel,r.fitt
 #--------------------------------------
   saved <- NULL
   while(length(saved$value)<10) {
-    print(saved$value)
     if(is.null(saved)) { params <- pinitial
     } else { params <- opt$par #recursive
     }
@@ -502,14 +503,15 @@ f.recurse <- function(pinitial,r.data,r.constr=constr,r.modeltype=mymodel,r.fitt
       params,
       function(x) f.fit(x,data=r.data,constr=r.constr,modeltype=r.modeltype,fitting=r.fitting,treetable=r.treetable,genomesize=r.genomesize,ng=r.ng),
       method=r.method,
-      control=list(trace=0,parscale=params+1e-6,maxit=10000)
+      control=list(trace=1,parscale=params+1e-6,reltol=r.reltol,maxit=r.maxit)
     )
     if(opt$convergence>0) {warning("did not converge!")}
 
     saved <- rbind(saved,as.data.frame(t(unlist(opt))))
+    print(saved$value)
 
-    if (dim(saved)[1] > 2) {
-      if (identical(all.equal(sort(saved$value)[3],sort(saved$value)[1]),TRUE)) {
+    if (dim(saved)[1] > 1) {
+      if (identical(all.equal(sort(saved$value)[2],sort(saved$value)[1]),TRUE)) {
 	break;
       }
     }

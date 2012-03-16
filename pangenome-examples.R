@@ -40,15 +40,21 @@ source("f-pangenome.R")
 # infile <- "Bacilli-clusters.1e-10.6.csv"
 # more strict clustering:
 infile <- "Bacilli-clusters.1e-30.7.csv"
+# infile <- "mbgd.Bacilli.csv"
+
 mat.all <- read.csv(infile,sep="\t")
-mat.read <- mat.all[,3+1:(dim(mat.all)[2]-7)] #remove annotations
+#mat.read <- mat.all[,3+1:(dim(mat.all)[2]-7)] #remove annotations
 
-# get list of key files to process
-allkeys <- list.files(path="./",pattern="key-.+")
-
+# initialize tables
 table1 <- NULL
 table2 <- NULL
 table3 <- NULL
+table4 <- NULL
+
+# get list of all key files to process
+# allkeys <- list.files(path="./",pattern="key-.+")
+allkeys <- c("key-Staph_aureus", "key-Strep_pyogenes", "key-Strep_pneumoniae", "key-B_cereus", "key-Listeria", "key-Staphylococcus", "key-Streptococcus", "key-Bacillaceae","key-Lactobacillales", "key-Bacilli")
+allkeys <- allkeys[-1]
 
 for (mykey in allkeys) {
   # the key matches the names to RefSeq IDs
@@ -57,9 +63,9 @@ for (mykey in allkeys) {
   taxaname <- unlist(strsplit(mykey,'-'))[2]
   print(taxaname)
   # get the columns which are of interest
-  mycols <- unique(unlist(lapply(keys[,2],function(x) grep(x,colnames(mat.read)))))
+  mycols <- unique(unlist(lapply(keys[,2],function(x) grep(x,colnames(mat.all)))))
   # get a matrix of clusters containing gene families in the genomes of interest
-  mat <- mat.read[rowSums(mat.read)>0,mycols]
+  mat <- mat.all[rowSums(mat.all[,mycols]>0)>0,mycols]
 
   genomesize <- mean(colSums(mat>0)) # mean genome size measured in gene families
   ng <- dim(mat)[2] #number of genomes
@@ -96,6 +102,9 @@ for (mykey in allkeys) {
   ## Fit to the Gene Family Frequency Spectrum
   ##-------------------------------------------
 
+  # Set up plot with 2 rows, 1 column
+  par(mfrow=c(2,1))
+
   #calculate gene family frequency spectrum
   Gk <- f.getspectrum(mat)
 
@@ -106,11 +115,14 @@ for (mykey in allkeys) {
   ## Predict the gene family frequency spectrum
   ## using model 1D+E on a coalescent
 
+  mymaxit <- 10000
+  myreltol <- 1e-6
+
   mymodel <- "coalescent.spec" #use the coalescent tree w/G(k)
-  myfitting <- "chi2" #fit it using the Chi^2
+  myfitting <- "chi2" #fit it using this error measurement
   constr <- 1 # G0 constrained to the mean genome size during fitting
   # !! if constr changes, need to change input parameters as well
-  mymethod <- "BFGS" # alternative fitting routine: "BFGS"
+  mymethod <- "Nelder" # alternative fitting routine: "BFGS"
 
   #set initial parameters and recursively optimize
   opt.spec.cde <- f.recurse(c(1,100),r.data=Gk)
@@ -126,13 +138,13 @@ for (mykey in allkeys) {
   ## using model 2D+E on a coalescent
 
   mymodel <- "coalescent.spec" #use the coalescent tree w/G(k)
-  myfitting <- "chi2" #fit it using the Chi^2
+  myfitting <- "chi2" #fit it using this error function
   constr <- 1 # G0 constrained to the mean genome size during fitting
   # !! if constr changes, need to change input parameters as well
-  mymethod <- "BFGS" # alternative fitting routine: "BFGS"
+  mymethod <- "Nelder" # alternative fitting routine: "BFGS"
 
   #set initial parameters and recursively optimize
-  pinitial.spec.c2de <- c(params.spec.cde[1]/10,params.spec.cde[2]/100,params.spec.cde[3],params.spec.cde[1])
+  pinitial.spec.c2de <- c(params.spec.cde[1]/10,params.spec.cde[2]/100,params.spec.cde[3],params.spec.cde[1]*10000)
   opt.spec.c2de <- f.recurse(pinitial.spec.c2de,r.data=Gk)
 
   # get optimized parameters, calculate constrained parameter
@@ -145,13 +157,20 @@ for (mykey in allkeys) {
   ## using model 2D+E on a fixed tree
 
   mymodel <- "fixed.spec" #use a fixed tree w/G(k)
-  myfitting <- "chi2" #fit it using chi2 or sumsq
+  myfitting <- "chi2" #fit it using this error function
   constr <- 1 # G0 constrained to the mean genome size during fitting;
   # !! if constr changes, need to change input parameters as well
-  mymethod <- "BFGS" # alternative fitting routines: "BFGS","Nelder"
+  mymethod <- "Nelder" # alternative fitting routines: "BFGS","Nelder"
 
   #set initial parameters and recursively optimize
-  pinitial.spec.f2de <- opt.spec.c2de$par/c(10,10,1,1)
+#   pinitial.spec.f2de <- opt.spec.c2de$par/c(1,1,1,1)
+#   mymaxit <- 200
+#   myreltol <- 1e-4
+#   opt.spec.f2de <- f.recurse(pinitial.spec.f2de,r.data=Gk)
+
+  pinitial.spec.f2de <- opt.spec.c2de$par
+  mymaxit <- 10000
+  myreltol <- 1e-6
   opt.spec.f2de <- f.recurse(pinitial.spec.f2de,r.data=Gk)
 
   # get optimized parameters, calculate constrained parameter
@@ -165,13 +184,25 @@ for (mykey in allkeys) {
     dev.copy2pdf(file=paste("genespectrum-",taxaname,".pdf",sep=""),width=6,height=6)
   }
 
+  ##----------------------------------------
+  ## Table 4 -- Chi^2 values for Gk fits
+  ##----------------------------------------
+
+  # add results to Table 4
+  table4 <- rbind(table4,cbind(
+    taxaname,
+    opt.spec.cde$value,
+    opt.spec.c2de$value,
+    opt.spec.f2de$value
+    ))
+
   ##-----------------------------------------------------
   ## Fit to the Pangenome and core genome curves
   ##-----------------------------------------------------
 
   # Calculate 100 permutations each of the pangenome and core genome
-  perm.pangenome <- f.pangenome(mat,100)
-  perm.core <- f.core(mat,100)
+  perm.pangenome <- f.pangenome(mat,500)
+  perm.core <- f.core(mat,500)
 
   # Calculate the exact mean pan and core genome curves
   # from the gene frequency spectrum G(k)
@@ -184,7 +215,7 @@ for (mykey in allkeys) {
 
   # Prepare a new plot window
   plot(1:ng,xlim=c(1,ng),ylim=c(0.9*min(mean.core), 1.1*max(mean.pangenome)),log='y',xlab="Genomes added", ylab="Clusters of Gene Families",main=paste(taxaname,"Pangenome and Core genome",sep="\n"),pch='')
-  legend("right",c("2D+E on coalescent","2D+E on star tree","2D+E on a fixed tree"),lty=c(1,3,1),col=c('red','blue','orange'),lwd=2)
+  legend("right",c("1D+E on coalescent","2D+E on coalescent","2D+E on star tree","2D+E on a fixed tree"),lty=c(2,1,3,1),col=c('red','red','grey','blue'),lwd=2)
 
   # Plot polygons outlining permutations
   polygon(c(1:ng, rev(1:ng)), c(apply(perm.core,1,min), rev(apply(perm.core,1,max))), col="gray88",border=NA)
@@ -198,7 +229,7 @@ for (mykey in allkeys) {
   ## using model 1D+E on a coalescent tree
 
   mymodel <- "coalescent" #use the coalescent tree w/pancore
-  myfitting <- "chi2" #fit it using the Chi^2
+  myfitting <- "rms" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   mymethod <- "Nelder" # alternative fitting routine: "Nelder"
 
@@ -212,14 +243,14 @@ for (mykey in allkeys) {
   rms.cde <- f.rms(c(mean.pangenome,mean.core),c(pancore.cde$pan,pancore.cde$core))
 
   # Add the predicted curves to the plot
-#   lines(1:ng,pancore.cde$pan,col='red',lty=2,lwd=2)
-#   lines(1:ng,pancore.cde$core,col='red',lty=2,lwd=2)
+  lines(1:ng,pancore.cde$pan,col='red',lty=2,lwd=2)
+  lines(1:ng,pancore.cde$core,col='red',lty=2,lwd=2)
 
   ## Predict the core and pangenome curves
   ## using model 2D+E on a coalescent tree
 
   mymodel <- "coalescent" #use the coalescent tree w/G(k)
-  myfitting <- "chi2" #fit it using the Chi^2
+  myfitting <- "rms" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   mymethod <- "Nelder" # alternative fitting routine: "Nelder"
 
@@ -240,7 +271,7 @@ for (mykey in allkeys) {
   ## using model 2D+E on a star tree
 
   mymodel <- "star" #use the coalescent tree w/G(k)
-  myfitting <- "chi2" #fit it using the Chi^2
+  myfitting <- "rms" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   mymethod <- "Nelder" # alternative fitting routine: "BFGS","Nelder"
 
@@ -263,12 +294,15 @@ for (mykey in allkeys) {
   ## (calculated via the gene frequency spectrum)
 
   mymodel <- "fixed" #use the coalescent tree w/pancore
-  myfitting <- "chi2" #fit it using the Chi^2
+  myfitting <- "rms" #fit it using the Chi^2
   constr <- 1 # G0 constrained to the mean genome size during fitting
   mymethod <- "Nelder" # alternative fitting routine: "BFGS","Nelder"
 
   # recursively optimize using initial parameters and dataset to fit
-  opt.f2de <- f.recurse(opt.c2de$par,r.data=pancore)
+  pinitial.f2de <- opt.spec.c2de$par/c(1,1,1,1)
+  mymaxit <- 10000
+  myreltol <- 1e-6
+  opt.f2de <- f.recurse(pinitial.f2de,r.data=pancore,r.maxit=1000,r.reltol=1e-8)
 
   # get optimized parameters and calculate constrained param
   params.f2de <- c(opt.f2de$par,opt.f2de$par[4]*(genomesize-opt.f2de$par[2]/opt.f2de$par[1]-opt.f2de$par[3]))
@@ -276,16 +310,86 @@ for (mykey in allkeys) {
   pancore.f2de <- f.meanpancore(f.fixed.spec(params.f2de,treetable))
   rms.f2de <- f.rms(c(mean.pangenome,mean.core),c(pancore.f2de$pan,pancore.f2de$core))
 
-  lines(1:ng,pancore.f2de$pan,col='orange',lwd=2,lty=1)
-  lines(1:ng,pancore.f2de$core,col='orange',lwd=2,lty=1)
+  lines(1:ng,pancore.f2de$pan,col='blue',lwd=2,lty=1)
+  lines(1:ng,pancore.f2de$core,col='blue',lwd=2,lty=1)
 
   # print to PDF if interactive
   if(.Internal(dev.displaylist())) {
     dev.copy2pdf(file=paste("pancore-",taxaname,".pdf",sep=""),width=6,height=6)
   }
 
+
   ##----------------------------------------
-  ## Table 2 -- RMS values for 2D+E fits
+  ## Plot Figure 3
+  ##----------------------------------------
+
+  par(mfrow=c(2,1)) #2 rows, 1 column
+
+  #pangenome
+  plot(c(1:ng, rev(1:ng)), c(apply(perm.pangenome,1,min), rev(apply(perm.core,1,max))),pch='',xlab=paste(taxaname,"genomes, (n)",sep=" "), ylab="Clusters of Gene Families, Gcore(n)",main="Pangenome")
+  polygon(c(1:ng, rev(1:ng)), c(apply(perm.pangenome,1,min), rev(apply(perm.pangenome,1,max))), col="gray88",border=NA)
+  points(1:ng,mean.pangenome)
+  lines(1:ng,pancore.cde$pan,col='red',lty=2,lwd=2)
+  lines(1:ng,pancore.c2de$pan,col='red',lwd=2)
+
+  #core genome
+  plot(c(1:ng, rev(1:ng)), c(apply(perm.core,1,min), rev(apply(perm.core,1,max))),pch='',xlab=paste(taxaname,"genomes, (n)",sep=" "), ylab="Clusters of Gene Families, Gpan(n)",main="Core genome")
+  polygon(c(1:ng, rev(1:ng)), c(apply(perm.core,1,min), rev(apply(perm.core,1,max))), col="gray88",border=NA)
+  points(1:ng,mean.core)
+  lines(1:ng,pancore.cde$core,col='red',lty=2,lwd=2)
+  lines(1:ng,pancore.c2de$core,col='red',lwd=2)
+
+  # print to EPS if interactive, for import to SVG editor
+  if(.Internal(dev.displaylist())) {
+    dev.copy2eps(file=paste("fig3-",taxaname,".eps",sep=""),width=6,height=12)
+  }
+
+  ##----------------------------------------
+  ## Plot Figure 4
+  ##----------------------------------------
+
+  par(mfrow=c(2,1)) #2 rows, 1 column
+
+  #pangenome
+  plot(c(1:ng, rev(1:ng)), c(apply(perm.pangenome,1,min), rev(apply(perm.core,1,max))),pch='',xlab=paste(taxaname,"genomes, (n)",sep=" "), ylab="Clusters of Gene Families, Gcore(n)",main="Pangenome")
+  polygon(c(1:ng, rev(1:ng)), c(apply(perm.pangenome,1,min), rev(apply(perm.pangenome,1,max))), col="gray88",border=NA)
+  points(1:ng,mean.pangenome)
+  lines(1:ng,pancore.c2de$pan,col='red',lwd=2)
+  lines(1:ng,pancore.s2de$pan,col='black',lwd=2)
+  lines(1:ng,pancore.f2de$pan,col='blue',lwd=2)
+
+  #core genome 
+  plot(c(1:ng, rev(1:ng)), c(apply(perm.core,1,min), rev(apply(perm.core,1,max))),pch='',xlab=paste(taxaname,"genomes, (n)",sep=" "), ylab="Clusters of Gene Families, Gpan(n)",main="Core genome")
+  polygon(c(1:ng, rev(1:ng)), c(apply(perm.core,1,min), rev(apply(perm.core,1,max))), col="gray88",border=NA)
+  points(1:ng,mean.core)
+  lines(1:ng,pancore.c2de$core,col='red',lwd=2)
+  lines(1:ng,pancore.s2de$core,col='black',lwd=2)
+  lines(1:ng,pancore.f2de$core,col='blue',lwd=2)
+
+  # print to EPS if interactive, for import to SVG editor  
+  if(.Internal(dev.displaylist())) {
+    dev.copy2eps(file=paste("fig4-",taxaname,".eps",sep=""),width=6,height=12)
+  }
+
+  ##----------------------------------------
+  ## Plot Figure 5
+  ##----------------------------------------
+
+  # Add the G(k) plot window and best fit lines
+  bp.x <- barplot(Gk, ylab="Gene family frequency, G(k)",xlab=paste(taxaname,"genomes, k",sep=" "),names.arg=1:ng,main="Gene Family Frequency Spectrum",log='y',col="gray88",border="gray88")
+  lines(bp.x,spec.c2de,col='red',lty=2,lwd=2)
+  lines(bp.x,spec.f2de,col='blue',lty=2,lwd=2)
+  lines(bp.x,f.coalescent.spec(params.c2de,ng),col='red',lty=1,lwd=2)
+  lines(bp.x,f.fixed.spec(params.f2de,treetable),col='blue',lty=1,lwd=2)
+  lines(bp.x,f.fixed.spec(params.spec.f2de,treetable),col='grey',lty=2,lwd=2)
+
+  # print to EPS if interactive, for import to SVG editor  
+  if(.Internal(dev.displaylist())) {
+    dev.copy2eps(file=paste("fig5-",taxaname,".eps",sep=""),width=6,height=12)
+  }
+
+  ##----------------------------------------
+  ## Table 2 -- RMS values for pancore fits
   ##----------------------------------------
   # add results to Table 2
   table2 <- rbind(table2,cbind(
@@ -300,30 +404,31 @@ for (mykey in allkeys) {
   ## Table 3 -- coalescent 2D+E best fits and predictions
   ##--------------------------------------------------------
 
-  aa <- theta1 <- params.c2de[2]
-  bb <- rho1 <- params.c2de[1]
-  cc <- theta2 <- params.c2de[5]
-  dd <- rho2 <- params.c2de[4]
-
-  fslow <- theta1/rho1
-  ffast <- theta2/rho2
   Gess <- params.c2de[3]
 
-  y <- 100
-  Gnew100 <- 1/2/y * (sqrt(aa^2-2*aa*bb*y+2*aa*cc+2*aa*dd*y+bb^2*y^2+2*bb*cc*y-2*bb*dd*y^2+cc^2-2*cc*dd*y+dd^2*y^2)+aa-bb*y+cc-dd*y+2*y)
-  y <- 1000
-  Gnew1000<- 1/2/y * (sqrt(aa^2-2*aa*bb*y+2*aa*cc+2*aa*dd*y+bb^2*y^2+2*bb*cc*y-2*bb*dd*y^2+cc^2-2*cc*dd*y+dd^2*y^2)+aa-bb*y+cc-dd*y+2*y)
+  theta1 <- params.c2de[2]
+  rho1 <- params.c2de[1]
+  theta2 <- params.c2de[5]
+  rho2 <- params.c2de[4]
+
+  fslow <- theta1/rho1/G0
+  ffast <- theta2/rho2/G0
+  fess <- params.c2de[3]/G0
+
+  Gnew100 <- f.coalescent(params.c2de,100)$pan[100]-f.coalescent(params.c2de,100)$pan[99]
+  Gnew1000 <- f.coalescent(params.c2de,1000)$pan[1000]-f.coalescent(params.c2de,1000)$pan[999]
   Gcore100 <- f.coalescent(params.c2de,100)$core[100]
   Gcore1000 <- f.coalescent(params.c2de,1000)$core[1000]
 
   # add results to Table 3
   table3 <- rbind(table3,cbind(
     taxaname,
+    Gess,
     theta1,
     rho1,
     theta2,
     rho2,
-    Gess,
+    fess,
     fslow,
     ffast,
     Gnew100,
@@ -335,9 +440,11 @@ for (mykey in allkeys) {
 
 colnames(table1) <- c("taxaname","ng","Ngenes","G0","Ngenes/G0","Gcore","Gcore/G0","Gpan","Gpan/G0","dprot")
 colnames(table2) <- c("taxaname","RMS(data)","Coalescent 1D+E","Coalescent 2D+E","Star 2D+E","Fixed 2D+E")
-colnames(table3) <- c("taxaname","theta1","rho1","theta2","rho2","Gess","fslow","ffast","Gnew(100)","Gnew(1000)","Gcore(100)","Gcore(1000)")
-write.table(table1,f="table1.csv",sep="\t")
-write.table(table2,f="table2.csv",sep="\t")
-write.table(table3,f="table3.csv",sep="\t")
+colnames(table3) <- c("taxaname","Gess","theta1","rho1","theta2","rho2","fess","fslow","ffast","Gnew(100)","Gnew(1000)","Gcore(100)","Gcore(1000)")
+colnames(table4) <- c("taxaname","Coalescent 1D+E","Coalescent 2D+E","Fixed 2D+E")
+write.table(table1,f="table1_new.csv",sep="\t")
+write.table(table2,f="table2_new.csv",sep="\t")
+write.table(table3,f="table3_new.csv",sep="\t")
+write.table(table4,f="table4_new.csv",sep="\t")
 
 print("done")
