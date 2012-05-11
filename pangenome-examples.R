@@ -10,7 +10,7 @@
 ## The most recent version can be found at
 ## http://github.com/rec3141/pangenome
 ##
-## Usage:
+## USAGE:
 ## If you have R properly installed you
 ## should be able to run the examples from the
 ## command line via: 
@@ -54,7 +54,6 @@ table4 <- NULL
 # get list of all key files to process
 # allkeys <- list.files(path="./",pattern="key-.+")
 allkeys <- c("key-Staph_aureus", "key-Strep_pyogenes", "key-Strep_pneumoniae", "key-B_cereus", "key-Listeria", "key-Staphylococcus", "key-Streptococcus", "key-Bacillaceae","key-Lactobacillales", "key-Bacilli")
-allkeys <- allkeys[-1]
 
 for (mykey in allkeys) {
   # the key matches the names to RefSeq IDs
@@ -376,7 +375,8 @@ for (mykey in allkeys) {
   ##----------------------------------------
 
   # Add the G(k) plot window and best fit lines
-  bp.x <- barplot(Gk, ylab="Gene family frequency, G(k)",xlab=paste(taxaname,"genomes, k",sep=" "),names.arg=1:ng,main="Gene Family Frequency Spectrum",log='y',col="gray88",border="gray88")
+  bp.x <- barplot(Gk, ylim=c(10,10000),ylab="Gene family frequency, G(k)",xlab=paste(taxaname,"genomes, k",sep=" "),names.arg=1:ng,main="Gene Family Frequency Spectrum",log='y',col="gray88",border="gray88")
+  lines(bp.x,spec.cde,col='red',lty=3,lwd=2)
   lines(bp.x,spec.c2de,col='red',lty=2,lwd=2)
   lines(bp.x,spec.f2de,col='blue',lty=2,lwd=2)
   lines(bp.x,f.coalescent.spec(params.c2de,ng),col='red',lty=1,lwd=2)
@@ -403,48 +403,54 @@ for (mykey in allkeys) {
   ##--------------------------------------------------------
   ## Table 3 -- coalescent 2D+E best fits and predictions
   ##--------------------------------------------------------
+  Gess <- params.spec.c2de[3]
 
-  Gess <- params.c2de[3]
-
-  theta1 <- params.c2de[2]
-  rho1 <- params.c2de[1]
-  theta2 <- params.c2de[5]
-  rho2 <- params.c2de[4]
+  theta1 <- params.spec.c2de[2]
+  rho1 <- params.spec.c2de[1]
+  theta2 <- params.spec.c2de[5]
+  rho2 <- params.spec.c2de[4]
 
   fslow <- theta1/rho1/G0
   ffast <- theta2/rho2/G0
-  fess <- params.c2de[3]/G0
+  fess <- params.spec.c2de[3]/G0
 
-  Gnew100 <- f.coalescent(params.c2de,100)$pan[100]-f.coalescent(params.c2de,100)$pan[99]
-  Gnew1000 <- f.coalescent(params.c2de,1000)$pan[1000]-f.coalescent(params.c2de,1000)$pan[999]
-  Gcore100 <- f.coalescent(params.c2de,100)$core[100]
-  Gcore1000 <- f.coalescent(params.c2de,1000)$core[1000]
-
+  Gnew100 <- f.coalescent(params.spec.c2de,100)$pan[100]-f.coalescent(params.spec.c2de,100)$pan[99]
+  Gnew1000 <- f.coalescent(params.spec.c2de,1000)$pan[1000]-f.coalescent(params.spec.c2de,1000)$pan[999]
+  Gcore100 <- f.coalescent(params.spec.c2de,100)$core[100]
+  Gcore1000 <- f.coalescent(params.spec.c2de,1000)$core[1000]
+  Gpan100 <- f.coalescent(params.spec.c2de,100)$pan[100]
+  Gpan1000 <- f.coalescent(params.spec.c2de,1000)$pan[1000]
+  
   # add results to Table 3
   table3 <- rbind(table3,cbind(
     taxaname,
     Gess,
-    theta1,
+    theta1/rho1,
     rho1,
-    theta2,
+    theta2/rho2,
     rho2,
     fess,
     fslow,
     ffast,
     Gnew100,
     Gnew1000,
+    Gpan100,
+    Gpan1000,
     Gcore100,
-    Gcore1000))
+    Gcore1000
+))
 
-} #end allkeys
 
 colnames(table1) <- c("taxaname","ng","Ngenes","G0","Ngenes/G0","Gcore","Gcore/G0","Gpan","Gpan/G0","dprot")
 colnames(table2) <- c("taxaname","RMS(data)","Coalescent 1D+E","Coalescent 2D+E","Star 2D+E","Fixed 2D+E")
-colnames(table3) <- c("taxaname","Gess","theta1","rho1","theta2","rho2","fess","fslow","ffast","Gnew(100)","Gnew(1000)","Gcore(100)","Gcore(1000)")
+colnames(table3) <- c("taxaname","Gess","theta1/rho1","rho1","theta2/rho2","rho2","fess","fslow","ffast","Gnew(100)","Gnew(1000)","Gcore(100)","Gcore(1000)","Gpan(100)","Gpan(1000)")
 colnames(table4) <- c("taxaname","Coalescent 1D+E","Coalescent 2D+E","Fixed 2D+E")
-write.table(table1,f="table1_new.csv",sep="\t")
-write.table(table2,f="table2_new.csv",sep="\t")
-write.table(table3,f="table3_new.csv",sep="\t")
-write.table(table4,f="table4_new.csv",sep="\t")
+write.table(table1,f="table1_new3.csv",sep="\t")
+write.table(table2,f="table2_new3.csv",sep="\t")
+write.table(table3,f="table3_new3.csv",sep="\t")
+write.table(table4,f="table4_new3.csv",sep="\t")
+
+} #end allkeys
+
 
 print("done")
