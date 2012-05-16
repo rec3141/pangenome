@@ -13,4 +13,4 @@ A helper script provides example usage and plotting for each of the functions us
 
 -- The main script is pangenome-examples.R, there are more details in the header of that file on how to run it
 -- The functions are in f-pangenome.R, which is called by pangenome-examples.R
-
+-- Files needed to run the examples are located in the data/ directory
