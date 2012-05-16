@@ -34,12 +34,14 @@ rm(list=ls())
 
 #load file containing functions
 source("f-pangenome.R")
+datadir <- "./data/"
+# datadir <- ""
 
 # read in matrix of all Bacilli gene clusters
 # less strict clustering (default):
-# infile <- "Bacilli-clusters.1e-10.6.csv"
+# infile <- paste(datadir,"Bacilli-clusters.1e-10.6.csv",sep="")
 # more strict clustering:
-infile <- "Bacilli-clusters.1e-30.7.csv"
+infile <- paste(datadir,"Bacilli-clusters.1e-30.7.csv",sep="")
 # infile <- "mbgd.Bacilli.csv"
 
 mat.all <- read.csv(infile,sep="\t")
@@ -57,7 +59,7 @@ allkeys <- c("key-Staph_aureus", "key-Strep_pyogenes", "key-Strep_pneumoniae", "
 
 for (mykey in allkeys) {
   # the key matches the names to RefSeq IDs
-  keys <- read.table(mykey,sep="\t",row.names=1)
+  keys <- read.table(paste(datadir,mykey,sep=""),sep="\t",row.names=1)
   # the taxaname is the name of the taxonomic group
   taxaname <- unlist(strsplit(mykey,'-'))[2]
   print(taxaname)
@@ -71,7 +73,7 @@ for (mykey in allkeys) {
 
   # load phylogenetic tree table for this taxonomic group
   treename <- paste("treetable",taxaname,sep="-")
-  treetable <- read.table(treename,sep="\t",row.names=1)
+  treetable <- read.table(paste(datadir,treename,sep=""),sep="\t",row.names=1)
   colnames(treetable) <- c("desc_a","desc_b","dist")
 
   ##---------------------------------
